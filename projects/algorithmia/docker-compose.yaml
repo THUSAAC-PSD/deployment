@@ -1,0 +1,56 @@
+services:
+  frontend:
+    image: josephjoshua/algorithmia-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - .env
+      - .proxy.frontend.env
+    networks:
+      - proxy-net
+
+  backend:
+    image: josephjoshua/algorithmia-backend:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - proxy-net
+    env_file:
+      - .env
+      - .proxy.backend.env
+    environment:
+      - APP_ENV=production
+      - PORT=:9090
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=algorithmia
+      - DB_NAME=algorithmia
+      - DB_SSL_MODE=disable
+      - DB_USE_IN_MEMORY=false
+
+  postgres:
+    image: postgres:latest
+    container_name: algorithmia_postgres
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - proxy-net
+    environment:
+      - POSTGRES_USER=algorithmia
+      - POSTGRES_DB=algorithmia
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  proxy-net:
+    external: true
+
+volumes:
+  postgres-data:
