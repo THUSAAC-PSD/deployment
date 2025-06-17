@@ -10,7 +10,7 @@ services:
       - ./proxy/conf.d:/etc/nginx/conf.d
       - ./proxy/certs:/etc/nginx/certs:ro
     networks:
-      - proxy-net
+      - thusaa-nginx-proxy-net
 
   docker-gen:
     image: nginxproxy/docker-gen:latest
@@ -24,7 +24,7 @@ services:
       - ./proxy/conf.d:/etc/nginx/conf.d
       - ./proxy/html:/usr/share/nginx/html
     networks:
-      - proxy-net
+      - thusaa-nginx-proxy-net
 
   certbot:
     image: certbot/certbot
@@ -35,5 +35,5 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 networks:
-  proxy-net:
-    name: thusaa-nginx-proxy-net
+  thusaa-nginx-proxy-net:
+    external: true
