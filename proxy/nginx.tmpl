@@ -1,0 +1,77 @@
+# --- Global Settings ---
+server_names_hash_bucket_size 128;
+proxy_http_version 1.1;
+
+proxy_set_header Host $host;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+
+# --- Fallback Server ---
+server {
+    listen 80 default_server;
+    listen 443 ssl default_server;
+
+    # Return a "Service Unavailable" error for any unknown host.
+    return 503;
+
+    # Use a self-signed certificate to handle HTTPS for unknown hosts.
+    # This is just a placeholder to prevent Nginx from crashing.
+    ssl_certificate /etc/nginx/certs/default.crt;
+    ssl_certificate_key /etc/nginx/certs/default.key;
+}
+
+# --- Main Loop ---
+# This loop iterates over containers that have a VIRTUAL_HOST variable.
+{{ range . }}
+    {{ if and .Env.VIRTUAL_HOST .Env.VIRTUAL_PORT }}
+
+        # Create a unique upstream for each VIRTUAL_HOST and VIRTUAL_PATH combination
+        # to handle cases where one domain points to multiple services.
+        {{ $upstream_name := printf "%s-%s" .Env.VIRTUAL_HOST (or .Env.VIRTUAL_PATH "/") | sha1 }}
+        upstream {{ $upstream_name }} {
+            server {{ .Address.IP }}:{{ .Env.VIRTUAL_PORT }};
+        }
+
+        # --- HTTPS Redirect ---
+        # To enable SSL, set VIRTUAL_HOST and LETSENCRYPT_HOST environment variables on the container.
+        {{ if (exists (printf "/etc/nginx/certs/%s.crt" .Env.VIRTUAL_HOST)) }}
+        server {
+            listen 80;
+            server_name {{ .Env.VIRTUAL_HOST }};
+
+            location /.well-known/acme-challenge/ {
+                root /usr/share/nginx/html;
+                try_files $uri =404;
+            }
+
+            location / {
+                return 301 https://$host$request_uri;
+            }
+        }
+        {{ end }}
+
+        # --- Main Server ---
+        server {
+            server_name {{ .Env.VIRTUAL_HOST }};
+
+            {{ if (exists (printf "/etc/nginx/certs/%s.crt" .Env.VIRTUAL_HOST)) }}
+                # --- HTTPS Configuration ---
+                listen 443 ssl http2;
+                add_header Strict-Transport-Security "max-age=31536000" always; # HSTS Header
+
+                ssl_certificate /etc/nginx/certs/{{ .Env.VIRTUAL_HOST }}.crt;
+                ssl_certificate_key /etc/nginx/certs/{{ .Env.VIRTUAL_HOST }}.key;
+            {{ else }}
+                # --- HTTP Configuration ---
+                listen 80;
+            {{ end }}
+
+            location {{ or .Env.VIRTUAL_PATH "/" }} {
+                proxy_pass http://{{ $upstream_name }};
+            }
+        }
+    {{ end }}
+{{ end }}
