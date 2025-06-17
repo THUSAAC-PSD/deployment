@@ -13,7 +13,7 @@ services:
       - proxy-net
 
   docker-gen:
-    image: docker/docker-gen:latest
+    image: nginxproxy/docker-gen:latest
     container_name: nginx_docker_gen
     restart: unless-stopped
     command: -notify-sighup nginx_proxy -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
